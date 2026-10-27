@@ -1,0 +1,14 @@
+{
+  "name": "slack-presence-notifier",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:userscript": "node scripts/build-userscript.mjs",
+    "test": "node --test",
+    "check": "npm run build:userscript && npm test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Slack Presence Notifier · Development / Testing Demo</title>
+    <style>
+      :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; color: #172033; background: #f4f7fb; }
+      body { margin: 0; }
+      main { width: min(980px, calc(100% - 36px)); margin: 0 auto; padding: 42px 0 64px; }
+      .eyebrow { color: #5671a1; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+      h1 { margin: 8px 0 10px; font-size: clamp(30px, 5vw, 48px); letter-spacing: -.04em; }
+      .intro { max-width: 690px; color: #5b6880; line-height: 1.6; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 28px; }
+      .card { border: 1px solid #dce4f0; border-radius: 18px; background: #fff; box-shadow: 0 12px 32px rgba(37, 62, 101, .07); padding: 22px; }
+      .card h2 { margin: 0 0 16px; font-size: 18px; }
+      .member { display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid #e2e8f2; border-radius: 14px; padding: 16px; }
+      .member-name { font-weight: 750; }
+      .member-role { display: block; margin-top: 4px; color: #7b879a; font-size: 13px; }
+      .presence { display: inline-flex; align-items: center; gap: 8px; color: #5c6b82; font-size: 13px; font-weight: 700; }
+      .presence::before { width: 12px; height: 12px; border-radius: 50%; background: #9ba7b8; content: ""; }
+      .presence[data-qa-presence-active="true"]::before { background: #27a269; box-shadow: 0 0 0 4px #e2f5eb; }
+      .presence[data-qa-presence-active="false"]::before { background: #9ba7b8; box-shadow: 0 0 0 4px #edf0f4; }
+      .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+      button { cursor: pointer; border: 0; border-radius: 10px; padding: 11px 15px; color: #fff; background: #1264a3; font: inherit; font-weight: 750; }
+      button.secondary { color: #25405f; background: #e8eef7; }
+      button:hover { filter: brightness(.96); }
+      .status-line { min-height: 24px; margin-top: 18px; color: #4f607a; font-size: 14px; }
+      .log { max-height: 260px; overflow: auto; margin: 0; padding: 0; list-style: none; }
+      .log li { border-top: 1px solid #edf1f6; padding: 10px 0; color: #57667d; font-size: 13px; line-height: 1.45; }
+      .log li:first-child { border-top: 0; padding-top: 0; }
+      .tag { display: inline-block; margin-right: 7px; border-radius: 999px; padding: 3px 7px; color: #385985; background: #edf3fb; font-size: 11px; font-weight: 800; }
+      .note { margin-top: 20px; color: #718096; font-size: 13px; line-height: 1.5; }
+      @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">Development / Testing Demo</div>
+      <h1>Slack Presence Notifier</h1>
+      <p class="intro">This page exercises the same presence parsing and state-transition logic as the background userscript. It is not the userscript interface or a product dashboard; the Slack member row is synthetic and no Slack account or network request is required.</p>
+
+      <div class="grid">
+        <section class="card">
+          <h2>Rendered member row</h2>
+          <div id="synthetic-member" class="member">
+            <div>
+              <span class="member-name">Demo User</span>
+              <span class="member-role">Synthetic account</span>
+            </div>
+            <span class="presence" data-qa="presence_indicator" data-qa-presence-self="false" data-qa-presence-active="false">Away</span>
+          </div>
+          <div class="controls">
+            <button id="set-active" type="button">Set Active</button>
+            <button id="set-away" class="secondary" type="button">Set Away</button>
+          </div>
+          <div id="current-status" class="status-line" aria-live="polite">Current synthetic status: Away</div>
+          <p class="note">The monitor still polls every 3 seconds. The buttons also trigger an immediate check so the transition is visible without waiting.</p>
+        </section>
+
+        <section class="card">
+          <h2>Notification events</h2>
+          <ul id="event-log" class="log" aria-live="polite"></ul>
+        </section>
+      </div>
+    </main>
+
+    <script src="../src/presence-monitor.js"></script>
+    <script>
+      (() => {
+        const api = window.SlackPresenceMonitor;
+        const indicator = document.querySelector('[data-qa="presence_indicator"]');
+        const statusLine = document.querySelector("#current-status");
+        const eventLog = document.querySelector("#event-log");
+        const notificationMessages = [];
+
+        function addLog(type, message) {
+          const item = document.createElement("li");
+          const tag = document.createElement("span");
+          tag.className = "tag";
+          tag.textContent = type;
+          item.append(tag, document.createTextNode(message));
+          eventLog.prepend(item);
+        }
+
+        function setStatus(status) {
+          const active = status === "active";
+          indicator.setAttribute("data-qa-presence-active", String(active));
+          indicator.textContent = active ? "Active" : "Away";
+          statusLine.textContent = `Current synthetic status: ${active ? "Active" : "Away"}`;
+          monitor.check();
+        }
+
+        const monitor = api.createPresenceMonitor({
+          documentRef: document,
+          targetName: "Demo User",
+          intervalMs: 3000,
+          notify(message) {
+            notificationMessages.push(message);
+            addLog("notification", message);
+          },
+          onEvent(event) {
+            if (event.type !== "notification") {
+              addLog(event.type, event.status ? `Observed status: ${event.status}.` : "No notification sent.");
+            }
+          },
+          logger: { log() {}, warn() {}, error() {} }
+        });
+
+        document.querySelector("#set-active").addEventListener("click", () => setStatus("active"));
+        document.querySelector("#set-away").addEventListener("click", () => setStatus("away"));
+        monitor.start();
+      })();
+    </script>
+  </body>
+</html>
